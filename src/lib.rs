@@ -3,93 +3,82 @@ use http_parser::{HttpParserCallback, CallbackResult, HttpParser, ParseAction};
 //Parsing
 
 pub mod parser{
-
+    pub mod http{
     use http_parser::{HttpParserCallback, HttpParser, CallbackResult, ParseAction, HttpMethod};
+        use std::ops::DerefMut;
 
-    pub struct HttpCallback{
-        data: Vec<u8>
+
+        #[derive(Clone)]
+        pub enum HtmlData{
+        ValidData(Vec<u8>,Vec<u8>),
+        CompleteData(Vec<u8>),
+        NoData(Vec<u8>),
+        InvalidData
     }
-    struct HtmlData(Option<Vec<u8>>,Vec<u8>,bool,bool);
-
-    fn parseHtml(htmldat: Option<HtmlData>,dat: &u8) -> Option<HtmlData>{
+    fn parseHtml(htmldat: HtmlData,dat: &u8) -> HtmlData{
         let startChar = b"<!--[";
         let endChar = b"]-->";
-                                                        //InData Completed
-        if let Some(HtmlData(Some(mut x),mut y,z,false)) = htmldat{
-            //println!("Found other chars: {}",String::from_utf8_lossy(&[*dat]));
-               if startChar.contains(dat) || endChar.contains(dat){
+        //InData Completed
 
+       match htmldat {
+           HtmlData::ValidData(mut x,mut y) => {
+               return if startChar.contains(dat) || endChar.contains(dat) {
                    y.push(*dat);
 
-                  if !z && y.len() > 0 && &startChar[..y.len()] != y.as_slice()  {
-                      return Some(HtmlData(Some(x),Vec::new(),z,false));
-                  }
-
-
-                    //println!("{} {} current:{}",String::from_utf8_lossy(&y),String::from_utf8_lossy(&endChar[..]),String::from_utf8_lossy(&[*dat]));
-                   if y.as_slice() == &endChar[..]{
-                     //  println!("it is");
-                       if z{
-                           return Some(HtmlData(Some(x),y,false,true));
-                       }
-                       return Some(HtmlData(Some(x),y,z,false));
-
-                   }else if y.as_slice() == &startChar[..] {
-                        if(z){
-                            return None;
-                        }
-                       return Some(HtmlData(Some(Vec::new()),Vec::new(),true,false));
-
+                   if y.len() > 0 && &endChar[..y.len()] != y.as_slice() {
+                       return HtmlData::ValidData(x, Vec::new());
+                   }
+                   if y.as_slice() == &endChar[..] {
+                       return HtmlData::CompleteData(x);
+                   } else if y.as_slice() == &startChar[..] {
+                       return HtmlData::InvalidData;
                    }
                    //println!("end {}",String::from_utf8_lossy(&[*dat]));
-                   return Some(HtmlData(Some(x),y,z,false));
-               }else if z {
+                   HtmlData::ValidData(x, y, )
+               } else {
                    x.push(*dat);
 
-                   return Some(HtmlData(Some(x), Vec::new(), z, false));
+                   HtmlData::ValidData(x, Vec::new())
+               };
+            return HtmlData::ValidData(x,Vec::new())
+        },
+           HtmlData::NoData(mut y)=>{
+               y.push(*dat);
+               if y.len() > 0 && &startChar[..y.len()] != y.as_slice()  {
+                   return HtmlData::NoData(Vec::new());
                }
-            return Some(HtmlData(Some(Vec::new()),y,z,false))
-        }else{
-            htmldat
-        }
+               if y.as_slice() == &startChar[..] {
+                   return HtmlData::ValidData(Vec::new(),Vec::new());
+               }
+               println!("{}",String::from_utf8_lossy(&[*dat]));
+              return HtmlData::NoData(y);
+           },
+           y => y
 
-    }
-    impl HttpCallback{
-        pub fn default() -> HttpCallback{
-            HttpCallback{ data: Vec::new()}
-        }
-        pub fn data(&mut self) -> &Vec<u8>{
-            &self.data
-        }
-    }
-    impl HttpParserCallback for HttpCallback{
+    }}
+
+    impl HttpParserCallback for HtmlData{
         fn on_message_begin(&mut self, parser: &mut HttpParser) -> CallbackResult {
             println!("Message Begin");
             Ok(ParseAction::None)
         }
         fn on_body(&mut self,parser: &mut HttpParser,data: &[u8]) -> CallbackResult{
 
-            if let Some(HttpMethod::Post) |Some(HttpMethod::Put) = parser.method{
-                self.data = Vec::from(base64::decode(data).unwrap());
-                println!("{}",String::from_utf8_lossy(&self.data));
+            if let Some(HttpMethod::Post) | Some(HttpMethod::Put) = parser.method{
+                *self = HtmlData::CompleteData(Vec::from(base64::decode(data).unwrap()));
             }else if let Some(x) = parser.status_code{
                 println!("Status Code: {}", x);
-                self.data = match data.iter().fold(Some(HtmlData(Some(Vec::new()),Vec::new(),false,false)),parseHtml){
-                    Some(HtmlData(Some(x),_,false,_)) =>x,
-                    _ => { println!("lmao fail");
-                        return Err("Invalid Text".into())
-
-                    }
-                }
+                *self = data.iter().fold(HtmlData::NoData(Vec::new()),parseHtml);
             }
 
            Ok(ParseAction::None)
         }
+    }}
 
-
-
-
+    pub mod data{
+        p
     }
+
 }
 
 

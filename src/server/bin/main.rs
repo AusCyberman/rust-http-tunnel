@@ -5,7 +5,7 @@ use std::net::{TcpListener, TcpStream};
 use std::str;
 use std::fs::File;
 use std::io::Read;
-use httptun::parser::HttpCallback;
+use httptun::parser::http::HtmlData;
 use http_parser::{HttpParser, HttpParserType};
 
 
@@ -15,14 +15,19 @@ use http_parser::{HttpParser, HttpParserType};
 fn handle_connection(mut stream: TcpStream){
     let mut buffer = [0; 1024];
     let filedat = base64::encode(get_file_as_byte(&String::from("/home/auscyber/main.hs")));
-    let contents = format!("<html>\n<head><!--[{}]--></head></html>",filedat);
+
+    let mut html_file = std::fs::File::open("index.html").unwrap();
+    let mut html_dat: [u8;2048] = [0;2048];
+    html_file.read(&mut html_dat);
+    let contents = format!("<html>\n<head><!--[{}]-->{}",filedat,String::from_utf8_lossy(&html_dat));
     let response = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",contents.len(),contents);
     stream.read(&mut buffer).unwrap();
-    println!("{}",String::from_utf8_lossy(&buffer)) ;
+    //println!("{}",String::from_utf8_lossy(&buffer)) ;
+    //println!("{}",filedat);
     let mut parser = HttpParser::new(HttpParserType::Both);
-    let mut cb = HttpCallback::default();
+    let mut cb = HtmlData::NoData(Vec::new());
     parser.execute(&mut cb,&buffer);
-
+   // println!("{}",contents);
     let get = b"GET / HTTP/1.1\r\n";
     if buffer.starts_with(get){
 
