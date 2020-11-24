@@ -76,7 +76,7 @@ pub mod parser{
     }}
 
     pub mod data{
-        p
+        pub fn decode
     }
 
 }
