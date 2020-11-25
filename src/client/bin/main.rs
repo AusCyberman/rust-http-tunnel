@@ -39,7 +39,7 @@ fn main() -> Result<(),Error>{
             println!("seq_num {}\nseq_length {}\nack_num {}",y.seq_num,y.seq_length,y.ack_num);
 
             let dat = y.data;
-            if dat.len() != y.seq_length as usize{
+            if dat.len() > y.seq_length as usize{
                 println!("Invalid size");
                 return Ok(());
             }

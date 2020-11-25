@@ -5,13 +5,14 @@ use std::str;
 use std::fs::File;
 use std::io::Read;
 use httptun::parser::http::{HtmlData, HttpCallback, HttpMessage};
-use httptun::{HTML_DATA, HTTP_SERVER_SIZE, HTTP_CLIENT_SIZE};
+use httptun::{HTML_DATA, HTTP_SERVER_SIZE, HTTP_CLIENT_SIZE, DATA_PACKET_SIZE};
 use http_parser::{HttpMethod, HttpParser, HttpParserType};
 use httptun::transmission::{get_file_as_byte, Packet};
 use std::sync::{Arc, Mutex};
+use std::slice::Chunks;
 
 
-fn handle_connection(mut stream: TcpStream,buffer: Arc<Mutex<Vec<u8>>>){
+fn handle_connection(mut stream: TcpStream,buffer: Arc<Mutex<Chunks<u8>>>){
     let mut clientBuffer = [0; HTTP_CLIENT_SIZE];
     let filedat = get_file_as_byte(&String::from("/home/auscyber/main.hs"));
     let newpacket = Packet::new(&filedat);
@@ -58,13 +59,15 @@ fn handle_connection(mut stream: TcpStream,buffer: Arc<Mutex<Vec<u8>>>){
 
 
 fn main() {
-    let buffer = Arc::new(Mutex::new(Vec::new()));
+    let filedat = get_file_as_byte(&String::from("/home/auscyber/main.hs"));
+    let chunks = filedat.chunks(DATA_PACKET_SIZE);
 
+    let buffer = Arc::new(Mutex::new(chunks));
     let http_listener = TcpListener::bind("127.0.0.1:7878").unwrap();
     for stream in http_listener.incoming() {
         let stream = stream.unwrap();
         println!("Connection Established");
-        handle_connection(stream,)
+        handle_connection(stream,buffer.clone())
     }
 }
 
