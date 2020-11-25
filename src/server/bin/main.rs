@@ -1,59 +1,53 @@
 extern crate base64;
-use httptun::ThreadPool;
 use std::io::prelude::*;
 use std::net::{TcpListener, TcpStream};
 use std::str;
 use std::fs::File;
 use std::io::Read;
-use httptun::parser::http::HtmlData;
-use http_parser::{HttpParser, HttpParserType};
-
-
-
+use httptun::parser::http::{HtmlData, HttpCallback, HttpMessage};
+use httptun::{HTML_DATA, HTTP_SERVER_SIZE, HTTP_CLIENT_SIZE};
+use http_parser::{HttpMethod, HttpParser, HttpParserType};
+use httptun::parser::data::get_file_as_byte;
 
 
 fn handle_connection(mut stream: TcpStream){
-    let mut buffer = [0; 1024];
+    let mut clientBuffer = [0; HTTP_CLIENT_SIZE];
     let filedat = base64::encode(get_file_as_byte(&String::from("/home/auscyber/main.hs")));
 
     let mut html_file = std::fs::File::open("index.html").unwrap();
-    let mut html_dat: [u8;2048] = [0;2048];
+    let mut html_dat: [u8;HTML_DATA] = [0;HTML_DATA];
     html_file.read(&mut html_dat);
-    let contents = format!("<html>\n<head><!--[{}]-->{}",filedat,String::from_utf8_lossy(&html_dat));
-    let response = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",contents.len(),contents);
-    stream.read(&mut buffer).unwrap();
+    let contents = format!("<html><head><!--[{}]-->{}",filedat,String::from_utf8_lossy(&html_dat));
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+        contents.len(),
+        contents
+    );
+    stream.read(&mut clientBuffer).unwrap();
     //println!("{}",String::from_utf8_lossy(&buffer)) ;
     //println!("{}",filedat);
-    let mut parser = HttpParser::new(HttpParserType::Both);
-    let mut cb = HtmlData::NoData(Vec::new());
-    parser.execute(&mut cb,&buffer);
+    let mut parser = HttpParser::new(HttpParserType::Request);
+    let mut cb = HttpCallback::default();
+    HtmlData::NoData(Vec::new());
+    parser.execute(&mut cb,&clientBuffer);
+    println!("{}",String::from_utf8_lossy(&clientBuffer));
+    let clientRequest = HttpMessage::parse(cb);
    // println!("{}",contents);
-    let get = b"GET / HTTP/1.1\r\n";
-    if buffer.starts_with(get){
+    if let HttpMessage::ClientRequest(HttpMethod::Get,_) = clientRequest{
 
-
+    if response.len() > HTTP_SERVER_SIZE {
+        panic!("INVALID RESPONSE")
+    }
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
     }else{
-
+        println!("Not get request")
     }
 
 }
 
 
-fn get_file_as_byte(filename: &String) -> Vec<u8> {
-    let mut f = match File::open(&filename){
-        Ok(x) => x,
-        Err(x) => panic!("File not found {}",x)
-    };
-    let metadata = f.metadata().unwrap();
-    let mut buffer = vec![0; metadata.len() as usize];
-    f.read(&mut buffer).expect("buffer overflow lmao");
 
-
-    buffer
-
-}
 
 
 fn main() {

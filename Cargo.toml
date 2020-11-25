@@ -9,9 +9,6 @@ edition = "2018"
 [dependencies]
 base64 = "0.13.0"
 http_parser = "0.0.2"
-html5ever = "*"
-
-
 
 [[bin]]
 name = "server"
