@@ -1,8 +1,9 @@
 extern crate http_parser;
 //Parsing
-pub const DATA_PACKET_SIZE: usize = 10000;
+pub const DATA_PACKET_SIZE: usize = 50000;
 pub const HEADER_SIZE: usize = 1000;
 pub const HTML_DATA: usize = 1000;
+pub const METADATA_SIZE: usize = 12;
 pub const HTTP_SERVER_SIZE: usize = DATA_PACKET_SIZE+HTML_DATA+HEADER_SIZE;
 pub const HTTP_CLIENT_SIZE: usize = DATA_PACKET_SIZE+HEADER_SIZE;
 
@@ -23,37 +24,35 @@ pub mod parser{
             pub data: Option<Vec<u8>>
         }
 
-
         #[derive(Clone)]
         pub enum HtmlData{
         ValidData(Vec<u8>,Vec<u8>),
         CompleteData(Vec<u8>),
         NoData(Vec<u8>),
         InvalidData
-    }
+        }
         pub enum HttpMessage{
             ServerResponse(u16,HtmlData),
             ClientRequest(HttpMethod,HtmlData),
             EmptyMessage
         }
 
-
     fn parseHtml(htmldat: HtmlData,dat: &u8) -> HtmlData{
-        let startChar = b"<!--[";
-        let endChar = b"]-->";
+        let start_char = b"<!--[";
+        let end_char = b"]-->";
         //InData Completed
 
        match htmldat {
            HtmlData::ValidData(mut x,mut y) => {
-               return if startChar.contains(dat) || endChar.contains(dat) {
+               return if start_char.contains(dat) || end_char.contains(dat) {
                    y.push(*dat);
 
-                   if y.len() > 0 && &endChar[..y.len()] != y.as_slice() {
+                   if y.len() > 0 && &end_char[..y.len()] != y.as_slice() {
                        return HtmlData::ValidData(x, Vec::new());
                    }
-                   if y.as_slice() == &endChar[..] {
+                   if y.as_slice() == &end_char[..] {
                        return HtmlData::CompleteData(x);
-                   } else if y.as_slice() == &startChar[..] {
+                   } else if y.as_slice() == &start_char[..] {
                        return HtmlData::InvalidData;
                    }
                    //println!("end {}",String::from_utf8_lossy(&[*dat]));
@@ -66,10 +65,10 @@ pub mod parser{
         },
            HtmlData::NoData(mut y)=>{
                y.push(*dat);
-               if y.len() > 0 && &startChar[..y.len()] != y.as_slice()  {
+               if y.len() > 0 && &start_char[..y.len()] != y.as_slice()  {
                    return HtmlData::NoData(Vec::new());
                }
-               if y.as_slice() == &startChar[..] {
+               if y.as_slice() == &start_char[..] {
                    return HtmlData::ValidData(Vec::new(),Vec::new());
                }
                //println!("{}",String::from_utf8_lossy(&[*dat]));
@@ -138,57 +137,87 @@ pub mod parser{
 
             HttpMessage::EmptyMessage
         }}}
-    ///Data Module including all information relating to parsing ordered data
-    pub mod data{
-        use crate::{DATA_PACKET_SIZE};
-        use std::fs::File;
-        use std::io::Read;
-        use std::convert::TryFrom;
-
-        pub struct Packet{
-            seq_num: u32,
-            ack_num: u32,
-            data: [u8; DATA_PACKET_SIZE]
-        }
 
 
-        impl TryFrom<Vec<u8>> for Packet{
-            type Error = ();
+}
 
-            fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+pub mod transmission{
+    use crate::{DATA_PACKET_SIZE};
+    use std::fs::File;
+    use std::io::Read;
+    use std::convert::TryFrom;
+    use std::fmt::{Display, Formatter};
+    use crate::parser::http::HtmlData;
 
-                Ok(Packet{
-                    seq_num: 0,
-                    ack_num: 0,
-                    data: [0;DATA_PACKET_SIZE]
-                })
-            }
-        }
+    pub struct Packet<'a> {
+        pub seq_length: u32,
+        pub seq_num: u32,
+        pub ack_num: u32,
+        pub data: &'a [u8]
+    }
 
-        impl From<Packet> for Vec<u8>{
-            fn from(_: Packet) -> Self {
-                unimplemented!()
-            }
-        }
-        pub fn get_file_as_byte(filename: &String) -> Vec<u8> {
-            let mut f = match File::open(&filename){
-                Ok(x) => x,
-                Err(x) => panic!("File not found {}",x)
-            };
-            let metadata = f.metadata().unwrap();
-            let mut buffer = vec![0; metadata.len() as usize];
-            f.read(&mut buffer).expect("buffer overflow lmao");
+    pub fn unpacku32(num: &u32) -> [u8; 4]{
+        num.to_be_bytes()
+    }
+    pub fn packu32(arr: &[u8]) -> u32{
+
+        u32::from_be_bytes(<[u8; 4]>::try_from(arr).unwrap())
+    }
 
 
-            buffer
-
+    impl<'a> Packet<'a>{
+        pub fn new(data: &'a Vec<u8>) -> Packet<'a>{
+                Packet{
+                    seq_length: u32::try_from(data.len()).unwrap(),
+                    seq_num: 10,
+                    ack_num: 10,
+                    data: data.as_slice()
+                }
         }
 
     }
 
+    impl<'T> TryFrom<&'T Vec<u8>> for Packet<'T>{
+        type Error = HtmlData;
+
+        fn try_from(value: &'T Vec<u8>) -> Result<Self, Self::Error> {
+            Ok(Packet{
+                seq_num: packu32(&value[0..4]),
+                ack_num: packu32(&value[4..8]),
+                seq_length: packu32(&value[8..12]),
+                data: &value[12..]
+            })
+        }
+    }
+
+    impl<'a> From<Packet<'a>> for Vec<u8>{
+        fn from(p: Packet<'a>) -> Self {
+            let mut vec = Vec::new();
+            vec.append(&mut unpacku32(&p.seq_num).to_vec());
+            vec.append(&mut unpacku32(&p.ack_num).to_vec());
+            vec.append(&mut unpacku32(&p.seq_length).to_vec());
+            vec.append(&mut p.data.to_vec());
+            vec
+        }
+    }
+
+
+    pub fn get_file_as_byte(filename: &String) -> Vec<u8> {
+        let mut f = match File::open(&filename){
+            Ok(x) => x,
+            Err(x) => panic!("File not found {}",x)
+        };
+        let metadata = f.metadata().unwrap();
+        let mut buffer = vec![0; metadata.len() as usize];
+        f.read(&mut buffer).expect("buffer overflow lmao");
+
+
+        buffer
+
+    }
+
+
 }
-
-
 
 
 
