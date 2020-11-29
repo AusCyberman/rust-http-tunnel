@@ -12,8 +12,8 @@ http_parser = "0.0.2"
 
 [[bin]]
 name = "server"
-path = "src/server/main.rs"
+path = "src/server/bin/main.rs"
 
 [[bin]]
 name = "client"
-path = "src/client/main.rs"
+path = "src/client/bin/main.rs"
