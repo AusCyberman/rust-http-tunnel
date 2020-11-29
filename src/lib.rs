@@ -1,12 +1,12 @@
 extern crate http_parser;
 //Parsing
-pub const DATA_PACKET_SIZE: usize = DATA_SIZE+12;
+pub const DATA_PACKET_SIZE: usize = DATA_SIZE+METADATA_SIZE;
 pub const HEADER_SIZE: usize = 1000;
 pub const HTML_DATA: usize = 1000;
 pub const METADATA_SIZE: usize = 12;
 pub const DATA_SIZE: usize = 50000;
-pub const HTTP_SERVER_SIZE: usize = DATA_PACKET_SIZE+HTML_DATA+HEADER_SIZE;
-pub const HTTP_CLIENT_SIZE: usize = DATA_PACKET_SIZE+HEADER_SIZE;
+pub const HTTP_SERVER_SIZE: usize = (DATA_PACKET_SIZE+HTML_DATA+HEADER_SIZE) * 3;
+pub const HTTP_CLIENT_SIZE: usize = (DATA_PACKET_SIZE+HEADER_SIZE) * 3;
 
 
 
@@ -15,7 +15,7 @@ pub const HTTP_CLIENT_SIZE: usize = DATA_PACKET_SIZE+HEADER_SIZE;
     pub mod http{
         use http_parser::{ParseAction,HttpMethod,HttpParserCallback,HttpParser,CallbackResult};
         use crate::transmission::Packet;
-        use std::convert::TryFrom;
+        use std::{convert::TryFrom, println};
         pub struct HttpCallback{
             pub http_method: Option<HttpMethod>,
             pub status_code: Option<u16>,
@@ -82,27 +82,29 @@ pub const HTTP_CLIENT_SIZE: usize = DATA_PACKET_SIZE+HEADER_SIZE;
     }
     //Parse the http input and put it into the struct HttpCallback
     impl HttpParserCallback for HttpCallback{
+        
         fn on_body(&mut self,parser: &mut HttpParser,data: &[u8]) -> CallbackResult{
             self.data = Some(Vec::from(data));
-
+            println!("found data");
+            
             Ok(ParseAction::None)
         }
         fn on_status(&mut self,parser: &mut HttpParser, status: &[u8]) -> CallbackResult{
+            println!("{}",String::from_utf8_lossy(status));
             Ok(ParseAction::None)
         }
         fn on_message_complete(&mut self, parser: &mut HttpParser) -> CallbackResult{
            // println!("{}",parser.status_code.unwrap());
-
             if let Some(x) = parser.method{
                 println!("METHOD: {}",parser.method.unwrap().to_string());
                 self.http_method = Some(x);
             }else if let Some(x) = parser.status_code{
                 self.status_code = Some(x);
-                println!("{}",parser.status_code.unwrap());
+                println!("code: {}",x);
             }
-            println!("Message Begin");
-
-
+            if let Some(e) = parser.errno{
+                println!("error: {}",e);
+            };
             Ok(ParseAction::None)
         }
 
@@ -112,16 +114,23 @@ pub const HTTP_CLIENT_SIZE: usize = DATA_PACKET_SIZE+HEADER_SIZE;
 
             if let Some(method) = (&callback).http_method{
                     if let  all@HttpMethod::Post | all@HttpMethod::Get = method {
+                        if let Some(data) = callback.data{
+
+
+
+                            return HttpMessage::ClientRequest(all,Some(Packet::parse_vec(base64::decode(&data[2..]).unwrap()).unwrap()))
+                        }
                         return HttpMessage::ClientRequest(all,None);
                     } else {
                         return HttpMessage::ClientRequest(callback.http_method.unwrap(), None)
                     }
                     }else if let Some(status_code) = callback.status_code{
+                        println!("stat code from parse:  {}",status_code);
                         if let (Some(x),None) = callback.data.unwrap().iter().fold((None,Some(Vec::new())),parse_html){
 
 
-                            println!("{}",status_code);
                             return HttpMessage::ServerResponse(status_code,Some(Packet::parse_vec(base64::decode(x).unwrap()).unwrap()));
+                            
 
                         }else{
                             return HttpMessage::EmptyMessage;
@@ -134,7 +143,7 @@ pub const HTTP_CLIENT_SIZE: usize = DATA_PACKET_SIZE+HEADER_SIZE;
             HttpMessage::EmptyMessage
                 
         }
-pub fn create_http_packet(&mut self,ack_num: u32,seq_num:u32) -> Option<Vec<u8>>{
+pub fn create_http_packet(&mut self,seq_num: u32,ack_num:u32) -> Option<Vec<u8>>{
             match self {
                 //If input packet is a ServerResponse Packet, parse it and return the Vec
                 //containing valid data
@@ -142,41 +151,52 @@ pub fn create_http_packet(&mut self,ack_num: u32,seq_num:u32) -> Option<Vec<u8>>
                         if let Some(dat) = data{
 
                         let contents = format!("<html><head><!--[{}]-->{}",base64::encode(dat.create_packet(seq_num,ack_num)),"</head></html>");
+                        let message = match resp{
+                            200 => "OK",
+                            404 => "Not Found",
+                            _ => "Unknown"
+
+                        };
                         let response = format!(
-                                "HTTP/1.1 {} OK\r\nContent-Length: {2}\r\n\r\n{1}",
+                                                   
+                                "HTTP/1.1 {} {}\r\nContent-Length: {3}\r\n\r\n{2}",
                                 resp,
+                                message,
                                 contents,
                                 contents.len()
                             );
-
-
-
-                        return Some(response.as_bytes().to_vec());
+                        
+                             println!("response, {}",response.len());
+                            return Some(response.as_bytes().to_vec());
 
                         }
                         None
 
                 },
+
+
+
+
                 HttpMessage::ClientRequest(met,data) =>{
                     match met{
-                    HttpMethod::Post => {
-                        if let Some(dat) = data{
-                        let post = format!("POST / HTTP/1.0\r\n\
-                                     Content-Length: {1}\r\n\r\n{0}",base64::encode(dat.create_packet(seq_num, ack_num)),dat.seq_length);
-                        return Some(post.as_bytes().to_vec());
+                        HttpMethod::Post => {
+                            if let Some(dat) = data{
+                            let post = format!("POST / HTTP/1.0\r\n\
+                                         Content-Length: {1}\r\n\r\nd={0}",base64::encode(dat.create_packet(seq_num, ack_num)),dat.seq_length+2);
+                            return Some(post.as_bytes().to_vec());
 
-                        }else{
-                            None
+                            }else{
+                                None
+                            }
+                        },
+                        HttpMethod::Get =>{
+                            let get = b"GET / HTTP/1.0\r\nContent-Length: 0\r\n\r\n";
+                                   return Some(get.to_vec());
+
+                        },
+                        _ =>{
+                            return None;
                         }
-                    },
-                    HttpMethod::Get =>{
-                        let get = b"GET / HTTP/1.0\r\nContent-Length: 0\r\n\r\n";
-                               return Some(get.to_vec());
-
-                    },
-                    _ =>{
-                        return None;
-                    }
                     }
                 },
                 _ => None
@@ -214,7 +234,6 @@ pub mod transmission{
         num.to_be_bytes()
     }
     pub fn packu32(arr: &[u8]) -> u32{
-
         u32::from_be_bytes(<[u8; 4]>::try_from(arr).unwrap())
     }
 
@@ -225,9 +244,20 @@ pub mod transmission{
                     seq_num: 0,
                     ack_num: 0,
                     data: data.to_vec()
+
                 }
+
+
         }
 
+       pub fn parse_vec(value: Vec<u8>) -> Result<Self,()> {
+          Ok(Packet{
+                seq_num: packu32(&value[0..4]),
+                ack_num: packu32(&value[4..8]),
+                seq_length: packu32(&value[8..12]),
+                data: Vec::from(&value[12..])
+            })  
+        }
 
 
        pub fn create_packet(&mut self,seq: u32,ack: u32) -> Vec<u8>{
@@ -256,17 +286,6 @@ pub mod transmission{
         }
 
     }
-   impl Packet{
-        pub fn parse_vec(value: Vec<u8>) -> Result<Self,()> {
-          Ok(Packet{
-                seq_num: packu32(&value[0..4]),
-                ack_num: packu32(&value[4..8]),
-                seq_length: packu32(&value[8..12]),
-                data: Vec::from(&value[12..])
-            })  
-        }
-   }
-
 
           
 
