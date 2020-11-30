@@ -33,7 +33,7 @@ fn handle_connection(mut stream: TcpStream, chunks: &VecDeque<Vec<u8>>){
          let mut packet = match chunks.get(x.ack_num as usize){
             Some(y) => {
                 println!("Len: {}",y.len());
-                HttpMessage::ServerResponse(200,Some(Packet::new(y.as_slice())))
+                HttpMessage::ServerResponse(200,Some(Packet::from(y.clone())))
             },
             None => {
                 println!("could not find packet");
