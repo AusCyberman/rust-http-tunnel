@@ -1,10 +1,9 @@
-use std::{collections::BTreeMap, collections::VecDeque, net::TcpStream, sync::Mutex, println};
+use std::{ collections::VecDeque, net::TcpStream, println};
 use std::io::{Write, Read};
-use std::sync::{ Arc};
+use std::sync::{ Arc,Mutex};
 use httptun::{DATA_SIZE, http::{HttpMessage, HttpCallback}, transmission::get_file_as_byte};
 use httptun::{HTTP_CLIENT_SIZE, HTTP_SERVER_SIZE};
 use http_parser::{HttpParser, HttpParserType};
-use std::convert::{TryFrom, TryInto};
 use httptun::transmission::Packet;
 use std::error::Error;
 
@@ -25,7 +24,7 @@ fn main() -> Result<(),Box<dyn Error>>{
        
     //Data Parsing interface
     let input = get_file_as_byte(&String::from("main.hs"));
-    let mut outp_data_buffer: VecDeque<&[u8]> = input.chunks(DATA_SIZE).collect::<VecDeque<&[u8]>>();
+    let outp_data_buffer: VecDeque<&[u8]> = input.chunks(DATA_SIZE).collect::<VecDeque<&[u8]>>();
     let mut inp_data_buffer: VecDeque<Packet> = VecDeque::new();
     let mut counter: u32 = 0;
     let mut seq_num: u32 = 0;
@@ -42,6 +41,7 @@ fn main() -> Result<(),Box<dyn Error>>{
             },
             None => break
         };
+        //Set required packet to next packet in sequence
         send_pack.ack_num = counter;
         println!("Next Pack: {}",counter) ;
         let (send_ack,send_seq) = (send_pack.ack_num,send_pack.seq_num);
@@ -49,7 +49,7 @@ fn main() -> Result<(),Box<dyn Error>>{
 
         //make post request
         let mut message = HttpMessage::ClientRequest(http_parser::HttpMethod::Post,Some(send_pack.clone()));
-        if let Err(x) = stream.write(message.create_http_packet(send_pack.seq_num, send_pack.ack_num).unwrap().as_slice()){
+        if let Err(x) = stream.write(message.create_http_packet(send_seq, send_ack).unwrap().as_slice()){
             return Err(x.into());
         }
         let mut buffer: [u8; HTTP_SERVER_SIZE] = [0; HTTP_SERVER_SIZE];
@@ -58,7 +58,7 @@ fn main() -> Result<(),Box<dyn Error>>{
         let mut cb = HttpCallback::default();
         aparser.execute(&mut cb,&mut buffer);
  
-        let mut serv_message = HttpMessage::parse(cb);
+        let serv_message = HttpMessage::parse(cb);
         if let HttpMessage::ServerResponse(code,Some(packet)) = serv_message{     
             println!("code :{}",code);
             if let 404 = code{
