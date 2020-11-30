@@ -45,7 +45,7 @@ impl Packet {
         vec.append(&mut unpacku32(&self.seq_num).to_vec());
         vec.append(&mut unpacku32(&self.ack_num).to_vec());
         vec.append(&mut unpacku32(&self.seq_length).to_vec());
-        vec.append(&mut self.data.to_vec());
+        vec.append(&mut self.data);
         vec
     }
 }

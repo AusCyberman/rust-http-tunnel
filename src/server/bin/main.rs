@@ -3,7 +3,7 @@ use http_parser::{HttpMethod, HttpParser, HttpParserCallback, HttpParserType};
 use httptun::http::{HttpCallback, HttpMessage};
 use httptun::transmission::{get_file_as_byte, Packet};
 use httptun::{DATA_PACKET_SIZE, DATA_SIZE, HTML_DATA, HTTP_CLIENT_SIZE, HTTP_SERVER_SIZE};
-use std::fs::File;
+use std::{error::Error, fs::File};
 use std::io::Read;
 use std::net::{TcpListener, TcpStream};
 use std::ops::Add;
@@ -16,7 +16,7 @@ use std::{
     io::prelude::*,
 };
 
-fn handle_connection(mut stream: TcpStream, chunks: &VecDeque<Vec<u8>>) {
+fn handle_connection(mut stream: TcpStream, chunks: Arc<Mutex<VecDeque<Vec<u8>>>>) -> Result<(),Box<dyn std::error::Error>>{
     //Simple struct declarations to parse data
     let mut clientBuffer: [u8; HTTP_CLIENT_SIZE] = [0; HTTP_CLIENT_SIZE];
     let mut parser: HttpParser = HttpParser::new(HttpParserType::Request);
@@ -30,7 +30,7 @@ fn handle_connection(mut stream: TcpStream, chunks: &VecDeque<Vec<u8>>) {
     if let HttpMessage::ClientRequest(HttpMethod::Post, Some(x)) = message {
         println!("is get request");
         println!("ack_num {}", x.ack_num);
-        let mut packet = match chunks.get(x.ack_num as usize) {
+        let mut packet = match chunks.lock().unwrap().get(x.ack_num as usize) {
             Some(y) => {
                 println!("Len: {}", y.len());
                 HttpMessage::ServerResponse(200, Some(Packet::from(y.clone())))
@@ -46,21 +46,24 @@ fn handle_connection(mut stream: TcpStream, chunks: &VecDeque<Vec<u8>>) {
     } else {
         let mut packet = HttpMessage::ServerResponse(404, Some(Packet::from(Vec::new())));
 
-        stream.write(packet.create_http_packet(0, 0).unwrap().as_slice());
+        stream.write(packet.create_http_packet(0, 0).unwrap().as_slice())?;
     }
+    Ok(())
 }
 
-fn main() {
+fn main() -> Result<(),Box<dyn Error>>{
     let filedat: Vec<u8> = get_file_as_byte(&String::from("/home/auscyber/chair.png"));
-    let mut packets: VecDeque<Vec<u8>> = VecDeque::new();
+    let packets: Arc<Mutex<VecDeque<Vec<u8>>>> = Arc::new(Mutex::new(VecDeque::new()));
     for chunk in filedat.chunks(DATA_SIZE).into_iter() {
-        println!("index {}, size: {}", packets.len(), chunk.len());
-        packets.push_front(chunk.to_vec());
+        
+        packets.lock().unwrap().push_front(chunk.to_vec());
     }
     let http_listener = TcpListener::bind("127.0.0.1:7878").unwrap();
     for stream in http_listener.incoming() {
         let stream = stream.unwrap();
         println!("Connection Established");
-        handle_connection(stream, &packets);
+        let packets = packets.clone();
+        std::thread::spawn(|| handle_connection(stream, packets).map_err(|e| println!("Connection Failed: {}",e)));
     }
+    Ok(())
 }

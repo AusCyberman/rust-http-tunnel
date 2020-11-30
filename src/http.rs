@@ -1,10 +1,10 @@
 use crate::transmission::Packet;
 use crate::{HTML_DATA, HTML_PAGE_NAME};
+use anyhow::Result;
 use http_parser::{CallbackResult, HttpMethod, HttpParser, HttpParserCallback, ParseAction};
 use std::io::Read;
 use std::println;
-
-type HtmlData = (Option<Vec<u8>>, Option<Vec<u8>>);
+pub struct HtmlData(Option<Vec<u8>>, Option<Vec<u8>>);
 pub struct HttpCallback {
     pub http_method: Option<HttpMethod>,
     pub status_code: Option<u16>,
@@ -23,36 +23,35 @@ fn parse_html(htmldat: HtmlData, dat: &u8) -> HtmlData {
     let end_char = b"]-->";
 
     match htmldat {
-        (Some(mut x), Some(mut y)) => {
-            return if start_char.contains(dat) || end_char.contains(dat) {
+        HtmlData(Some(mut x), Some(mut y)) => {
+            if start_char.contains(dat) || end_char.contains(dat) {
                 y.push(*dat);
 
                 if y.len() > 0 && &end_char[..y.len()] != y.as_slice() {
-                    return (Some(x), Some(Vec::new()));
+                    return HtmlData(Some(x), Some(Vec::new()));
                 }
                 if y.as_slice() == &end_char[..] {
-                    return (Some(x), None);
+                    return HtmlData(Some(x), None);
                 } else if y.as_slice() == &start_char[..] {
-                    return (None, None);
+                    return HtmlData(None, None);
                 }
                 //println!("end {}",String::from_utf8_lossy(&[*dat]));
-                (Some(x), Some(y))
+                return HtmlData(Some(x), Some(y));
             } else {
                 x.push(*dat);
 
-                (Some(x), Some(Vec::new()))
+                return HtmlData(Some(x), Some(Vec::new()));
             };
         }
-        (None, Some(mut y)) => {
+        HtmlData(None, Some(mut y)) => {
             y.push(*dat);
             if y.len() > 0 && &start_char[..y.len()] != y.as_slice() {
-                return (None, Some(Vec::new()));
+                return HtmlData(None, Some(Vec::new()));
             }
             if y.as_slice() == &start_char[..] {
-                return (Some(Vec::new()), Some(Vec::new()));
+                return HtmlData(Some(Vec::new()), Some(Vec::new()));
             }
-            //println!("{}",String::from_utf8_lossy(&[*dat]));
-            return (None, Some(y));
+            return HtmlData(None, Some(y));
         }
         y => y,
     }
@@ -79,10 +78,9 @@ impl HttpParserCallback for HttpCallback {
         Ok(ParseAction::None)
     }
     fn on_message_complete(&mut self, parser: &mut HttpParser) -> CallbackResult {
-        // println!("{}",parser.status_code.unwrap());
-        if let Some(x) = parser.method {
-            println!("METHOD: {}", parser.method.unwrap().to_string());
-            self.http_method = Some(x);
+        if let Some(method) = parser.method {
+            println!("METHOD: {}", method.to_string());
+            self.http_method = Some(method);
         } else if let Some(x) = parser.status_code {
             self.status_code = Some(x);
             println!("code: {}", x);
@@ -109,11 +107,11 @@ impl HttpMessage {
             }
         } else if let Some(status_code) = callback.status_code {
             println!("stat code from parse:  {}", status_code);
-            if let (Some(x), None) = callback
+            if let HtmlData(Some(x), None) = callback
                 .data
                 .unwrap()
                 .iter()
-                .fold((None, Some(Vec::new())), parse_html)
+                .fold(HtmlData(None, Some(Vec::new())), parse_html)
             {
                 return HttpMessage::ServerResponse(
                     status_code,
