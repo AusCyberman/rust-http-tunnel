@@ -33,7 +33,7 @@ fn handle_connection(mut stream: TcpStream, chunks: &VecDeque<Vec<u8>>){
          let mut packet = match chunks.get(x.ack_num as usize){
             Some(y) => {
                 println!("Len: {}",y.len());
-                HttpMessage::ServerResponse(200,Some(Packet::new(y.as_slice())))
+                HttpMessage::ServerResponse(200,Some(Packet::from(y.clone())))
             },
             None => {
                 println!("could not find packet");
@@ -51,9 +51,6 @@ fn handle_connection(mut stream: TcpStream, chunks: &VecDeque<Vec<u8>>){
      
     }
 
-
-
-
 }
 
 
@@ -61,7 +58,7 @@ fn handle_connection(mut stream: TcpStream, chunks: &VecDeque<Vec<u8>>){
 
 
 fn main() {
-    let filedat: Vec<u8> = get_file_as_byte(&String::from("C:\\users\\pierlotw\\Downloads\\IMG_1628 (002).JPG"));
+    let filedat: Vec<u8> = get_file_as_byte(&String::from("/home/auscyber/chair.png"));
     let mut packets: VecDeque<Vec<u8>> = VecDeque::new();
     for chunk in filedat.chunks(DATA_SIZE).into_iter(){
             println!("index {}, size: {}",packets.len(),chunk.len());
