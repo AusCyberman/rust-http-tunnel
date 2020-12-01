@@ -14,7 +14,7 @@ pub struct HttpCallback{
 }
 /// Includes data for packets
 pub enum HttpMessage{
-    ///Server Response packet includes status_code and HtmlData
+    ///Server Response message includes status_code and HtmlData encapsulated so it can be generalised
     ServerResponse(u16,Option<Packet>),
     ClientRequest(HttpMethod,Option<Packet>),
     EmptyMessage
@@ -62,13 +62,13 @@ fn parse_html(htmldat: HtmlData,dat: &u8) -> HtmlData{
     }
 }
 impl HttpCallback{
-pub fn default() -> HttpCallback{
-    HttpCallback{
-        http_method: None,
-        status_code:None,
-        data:None
+    pub fn default() -> HttpCallback{
+        HttpCallback{
+            http_method: None,
+            status_code:None,
+            data:None
+        }
     }
-}
 }
 //Parse the http input and put it into the struct HttpCallback
 impl HttpParserCallback for HttpCallback{
@@ -100,100 +100,100 @@ impl HttpParserCallback for HttpCallback{
 
 }
 impl HttpMessage{
-pub fn parse(callback: HttpCallback) -> HttpMessage{
+    pub fn parse(callback: HttpCallback) -> HttpMessage{
 
-    if let Some(method) = (&callback).http_method{
-            if let  all@HttpMethod::Post | all@HttpMethod::Get = method {
-                if let Some(data) = callback.data{
+        if let Some(method) = (&callback).http_method{
+                if let  all@HttpMethod::Post | all@HttpMethod::Get = method {
+                    if let Some(data) = callback.data{
 
 
 
-                    return HttpMessage::ClientRequest(all,Some(Packet::parse_u8_vec(base64::decode(&data[2..]).unwrap()).unwrap()))
+                        return HttpMessage::ClientRequest(all,Some(Packet::parse_u8_vec(base64::decode(&data[2..]).unwrap()).unwrap()))
+                    }
+                    return HttpMessage::ClientRequest(all,None);
+                } else {
+                    return HttpMessage::ClientRequest(callback.http_method.unwrap(), None)
                 }
-                return HttpMessage::ClientRequest(all,None);
-            } else {
-                return HttpMessage::ClientRequest(callback.http_method.unwrap(), None)
-            }
-            }else if let Some(status_code) = callback.status_code{
-                println!("stat code from parse:  {}",status_code);
-                if let (Some(x),None) = callback.data.unwrap().iter().fold((None,Some(Vec::new())),parse_html){
+                }else if let Some(status_code) = callback.status_code{
+                    println!("stat code from parse:  {}",status_code);
+                    if let (Some(x),None) = callback.data.unwrap().iter().fold((None,Some(Vec::new())),parse_html){
 
 
-                    return HttpMessage::ServerResponse(status_code,Some(Packet::parse_u8_vec(base64::decode(x).unwrap()).unwrap()));
-                    
-
-                }else{
-                    return HttpMessage::EmptyMessage;
-
-                }
-
-            }
-            println!("Invalid Packet");
-
-    HttpMessage::EmptyMessage
-        
-}
-pub fn create_http_packet(&mut self,seq_num: u32,ack_num:u32) -> Option<Vec<u8>>{
-    match self {
-        //If input packet is a ServerResponse Packet, parse it and return the Vec
-        //containing valid data
-        HttpMessage::ServerResponse(resp,data) =>{
-                if let Some(dat) = data{
-                let mut extra_html = std::fs::File::open(HTML_PAGE_NAME).unwrap();
-                let mut extra_html_buf: [u8; HTML_DATA] = [0;HTML_DATA];
-                extra_html.read( &mut extra_html_buf).unwrap();
-                let contents = format!("<html><head><!--[{}]-->{}",base64::encode(dat.create_u8_packet(seq_num,ack_num)),String::from_utf8_lossy(&extra_html_buf));
-                let message = match resp{
-                    200 => "OK",
-                    404 => "Not Found",
-                    _ => "Unknown"
-
-                };
-                let response = format!(
-                                            
-                        "HTTP/1.1 {} {}\r\nContent-Length: {3}\r\n\r\n{2}",
-                        resp,
-                        message,
-                        contents,
-                        contents.len()
-                    );
-                
-                        println!("response, {}",response.len());
-                    return Some(response.as_bytes().to_vec());
-
-                }
-                None
-
-        },
-
-
-
-
-        HttpMessage::ClientRequest(met,data) =>{
-            match met{
-                HttpMethod::Post => {
-                    if let Some(dat) = data{
-                    let data = format!("d={0}",base64::encode(dat.create_u8_packet(seq_num, ack_num)));
-                    let post = format!("POST / HTTP/1.0\r\n\
-                                    Content-Length: {1}\r\n\r\n{0}",data,data.len());
-                    return Some(post.as_bytes().to_vec());
+                        return HttpMessage::ServerResponse(status_code,Some(Packet::parse_u8_vec(base64::decode(x).unwrap()).unwrap()));
+                        
 
                     }else{
-                        None
-                    }
-                },
-                HttpMethod::Get =>{
-                    let get = b"GET / HTTP/1.0\r\nContent-Length: 0\r\n\r\n";
-                            return Some(get.to_vec());
+                        return HttpMessage::EmptyMessage;
 
-                },
-                _ =>{
-                    return None;
+                    }
+
                 }
-            }
-        },
-        _ => None
+                println!("Invalid Packet");
+
+        HttpMessage::EmptyMessage
+            
     }
+    pub fn create_http_packet(&mut self,seq_num: u32,ack_num:u32) -> Option<Vec<u8>>{
+        match self {
+            //If input packet is a ServerResponse Packet, parse it and return the Vec
+            //containing valid data
+            HttpMessage::ServerResponse(resp,data) =>{
+                    if let Some(dat) = data{
+                    let mut extra_html = std::fs::File::open(HTML_PAGE_NAME).unwrap();
+                    let mut extra_html_buf: [u8; HTML_DATA] = [0;HTML_DATA];
+                    extra_html.read( &mut extra_html_buf).unwrap();
+                    let contents = format!("<html><head><!--[{}]-->{}",base64::encode(dat.create_u8_packet(seq_num,ack_num)),String::from_utf8_lossy(&extra_html_buf));
+                    let message = match resp{
+                        200 => "OK",
+                        404 => "Not Found",
+                        _ => "Unknown"
+
+                    };
+                    let response = format!(
+                                                
+                            "HTTP/1.1 {} {}\r\nContent-Length: {3}\r\n\r\n{2}",
+                            resp,
+                            message,
+                            contents,
+                            contents.len()
+                        );
+                    
+                            println!("response, {}",response.len());
+                        return Some(response.as_bytes().to_vec());
+
+                    }
+                    None
+
+            },
+
+
+
+
+            HttpMessage::ClientRequest(met,data) =>{
+                match met{
+                    HttpMethod::Post => {
+                        if let Some(dat) = data{
+                        let data = format!("d={0}",base64::encode(dat.create_u8_packet(seq_num, ack_num)));
+                        let post = format!("POST / HTTP/1.0\r\n\
+                                        Content-Length: {1}\r\n\r\n{0}",data,data.len());
+                        return Some(post.as_bytes().to_vec());
+
+                        }else{
+                            None
+                        }
+                    },
+                    HttpMethod::Get =>{
+                        let get = b"GET / HTTP/1.0\r\nContent-Length: 0\r\n\r\n";
+                                return Some(get.to_vec());
+
+                    },
+                    _ =>{
+                        return None;
+                    }
+                }
+            },
+            _ => None
+        }
 
 }
 

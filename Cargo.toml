@@ -17,3 +17,8 @@ path = "src/server/bin/main.rs"
 [[bin]]
 name = "client"
 path = "src/client/bin/main.rs"
+
+
+[[bin]]
+name = "http_test"
+path = "src/http_test.rs"
