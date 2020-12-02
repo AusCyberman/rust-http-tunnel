@@ -26,7 +26,7 @@ fn main() -> Result<()> {
     let mut inp_data_buffer: VecDeque<Packet> = VecDeque::new();
     let mut counter: u32 = 0;
     let mut seq_num: u32 = 0;
-
+    let mut localStream = TcpStream::connect("localhost:22");
     loop {
         let mut aparser = HttpParser::new(HttpParserType::Response);
         let mut stream = match TcpStream::connect("127.0.0.1:7878") {

@@ -1,7 +1,7 @@
 use std::convert::TryFrom;
 use std::fs::File;
 use std::io::Read;
-
+use std::sync::{Arc,Mutex};
 pub fn encode(data: Vec<u8>) -> String {
     base64::encode(data)
 }
@@ -70,4 +70,9 @@ pub fn get_file_as_byte(filename: &String) -> Vec<u8> {
     let mut buffer = vec![0; metadata.len() as usize];
     f.read(&mut buffer).expect("buffer overflow lmao");
     buffer
+}
+type MutArc<T> = Arc<Mutex<T>>;
+
+pub struct DataBuffer{
+    counter: MutArc<u32>
 }

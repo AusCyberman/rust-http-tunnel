@@ -52,7 +52,7 @@ fn handle_connection(mut stream: TcpStream, chunks: Arc<Mutex<VecDeque<Vec<u8>>>
 }
 
 fn main() -> Result<(),Box<dyn Error>>{
-    let filedat: Vec<u8> = get_file_as_byte(&String::from("/home/auscyber/chair.png"));
+    let filedat: Vec<u8> = get_file_as_byte(&String::from("C:\\users\\pierlotw\\Downloads\\jim.jpg"));
     let packets: Arc<Mutex<VecDeque<Vec<u8>>>> = Arc::new(Mutex::new(VecDeque::new()));
     for chunk in filedat.chunks(DATA_SIZE).into_iter() {
         
